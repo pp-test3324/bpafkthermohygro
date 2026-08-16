@@ -44,11 +44,11 @@ let chartManager = null;
 let audioContext = null;
 
 // Initialize App on DOM Loaded
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   loadSavedSettings();
   initChart();
-  loadSavedHistory();
   initEventListeners();
+  await loadSavedHistory();
   connectMQTT();
 });
 

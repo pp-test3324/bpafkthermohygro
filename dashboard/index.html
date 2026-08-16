@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ThermoHygro IoT Dashboard - Real-time Monitor</title>
+  
+  <!-- Google Fonts (Inter & Outfit) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- MQTT.js -->
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <header class="navbar">
+    <div class="logo-area">
+      <div class="logo-icon">
+        <i class="fa-solid fa-temperature-half"></i>
+      </div>
+      <div>
+        <h1 class="app-title">ThermoHygro <span>IoT</span></h1>
+        <p class="app-subtitle">EMQX Cloud Monitoring System</p>
+      </div>
+    </div>
+
+    <div class="nav-controls">
+      <!-- Status Badge -->
+      <div id="connectionStatusPill" class="status-pill status-disconnected">
+        <span class="status-dot"></span>
+        <span id="connectionStatusText">Disconnected</span>
+      </div>
+
+      <!-- Quick Action Buttons -->
+      <button id="btnDemoMode" class="btn btn-outline-amber" title="Toggle Mode Simulasi Data">
+        <i class="fa-solid fa-flask"></i> <span class="btn-text">Demo Mode</span>
+      </button>
+
+      <button id="btnOpenConfig" class="btn btn-secondary" title="Konfigurasi EMQX MQTT">
+        <i class="fa-solid fa-gear"></i> <span class="btn-text">EMQX Config</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Alert Banner Container -->
+  <div id="alertBannerContainer" class="alert-banner-container"></div>
+
+  <!-- Main Container -->
+  <main class="dashboard-container">
+
+    <!-- Top Dashboard Grid: Big Metrics & Data Table -->
+    <div class="top-dashboard-grid">
+
+      <!-- Left Column: Big Metrics Cards -->
+      <div class="metrics-column">
+        
+        <!-- Temperature Card (Displays Overall Average) -->
+        <div class="card metric-card-big card-temp">
+          <div class="metric-card-header">
+            <span class="card-label">Rata-rata Suhu</span>
+            <button id="unitToggleBtn" class="unit-toggle-pill" title="Ubah °C / °F">°C</button>
+          </div>
+          <div class="big-value-wrap">
+            <span id="tempValue" class="display-value">--,--</span>
+            <span id="tempUnit" class="display-unit">°C</span>
+          </div>
+          <div class="card-footer-mini">
+            <span>Min: <strong id="tempMin">--,- °C</strong></span>
+            <span>Terkini: <strong id="tempLatest">--,- °C</strong></span>
+            <span>Maks: <strong id="tempMax">--,- °C</strong></span>
+          </div>
+        </div>
+
+        <!-- Humidity Card (Displays Overall Average) -->
+        <div class="card metric-card-big card-hum">
+          <div class="metric-card-header">
+            <span class="card-label">Rata-rata Kelembapan</span>
+            <span class="badge badge-humidity">RH</span>
+          </div>
+          <div class="big-value-wrap">
+            <span id="humValue" class="display-value">--,--</span>
+            <span class="display-unit">%</span>
+          </div>
+          <div class="card-footer-mini">
+            <span>Min: <strong id="humMin">--,- %</strong></span>
+            <span>Terkini: <strong id="humLatest">--,- %</strong></span>
+            <span>Maks: <strong id="humMax">--,- %</strong></span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Right Column: Data Log Table (Matches Reference Layout) -->
+      <div class="card table-card-main">
+        <div class="table-card-header">
+          <div class="table-title">
+            <i class="fa-solid fa-table"></i>
+            <div>
+              <h3>Tabel Data Masuk (Tiap 5 Menit)</h3>
+              <p>Total Data: <span id="totalDataCount">0</span> Poin</p>
+            </div>
+          </div>
+          
+          <div class="table-actions-inline">
+            <div class="search-box">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" id="tableSearchInput" placeholder="Cari tanggal/waktu...">
+            </div>
+            <button id="btnExportCSV" class="btn btn-emerald btn-sm">
+              <i class="fa-solid fa-file-csv"></i> Ekspor CSV
+            </button>
+            <button id="btnExportJSON" class="btn btn-indigo btn-sm">
+              <i class="fa-solid fa-file-code"></i> JSON
+            </button>
+            <button id="btnImportJSON" class="btn btn-secondary btn-sm" title="Impor Riwayat Data (.json)">
+              <i class="fa-solid fa-file-import"></i> Impor JSON
+            </button>
+            <input type="file" id="jsonFileInput" accept=".json" style="display: none;">
+            <button id="btnClearLogs" class="btn btn-danger-outline btn-sm" title="Hapus Riwayat">
+              <i class="fa-solid fa-trash-can"></i>
+            </button>
+          </div>
+        </div>
+        
+        <div class="table-responsive">
+          <table class="custom-table">
+            <thead>
+              <tr>
+                <th style="width: 60px;">No.</th>
+                <th>Waktu</th>
+                <th>Suhu</th>
+                <th>Kelembapan</th>
+              </tr>
+            </thead>
+            <tbody id="logsTableBody">
+              <tr class="empty-row">
+                <td colspan="4">
+                  <div class="empty-state">
+                    <i class="fa-solid fa-spinner fa-spin"></i>
+                    <p>Menunggu data telemetri masuk dari EMQX (Tiap 5 Menit)...</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Bottom Section: Separate Telemetry Charts (Suhu & Kelembapan) -->
+    <div class="charts-section">
+      <div class="charts-header-bar">
+        <div class="chart-main-title">
+          <i class="fa-solid fa-chart-line"></i>
+          <div>
+            <h2>Grafik Tren Telemetri</h2>
+            <p>Visualisasi Terpisah Suhu (°C) dan Kelembapan (%)</p>
+          </div>
+        </div>
+
+        <div class="chart-controls">
+          <div class="btn-group" role="group">
+            <button id="btnRange15m" class="btn-group-item active">15 Mnt</button>
+            <button id="btnRange1h" class="btn-group-item">1 Jam</button>
+            <button id="btnRangeAll" class="btn-group-item">Semua</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="charts-grid">
+        <!-- Dedicated Temperature Chart Card -->
+        <div class="card chart-card-main">
+          <div class="chart-card-sub-header">
+            <i class="fa-solid fa-temperature-half" style="color: var(--temp-primary);"></i>
+            <span>Grafik Tren Suhu (°C)</span>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="tempChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Dedicated Humidity Chart Card -->
+        <div class="card chart-card-main">
+          <div class="chart-card-sub-header">
+            <i class="fa-solid fa-droplet" style="color: var(--hum-primary);"></i>
+            <span>Grafik Tren Kelembapan (%)</span>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="humChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="app-footer">
+    <p>ThermoHygrometer IoT Dashboard &copy; 2026 | Magang BPAFK Surakarta | Powered by EMQX & ESP32</p>
+  </footer>
+
+  <!-- MQTT Configuration Modal -->
+  <div id="configModal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-sliders"></i> Konfigurasi EMQX MQTT Broker</h3>
+        <button id="btnCloseConfigModal" class="modal-close-btn">&times;</button>
+      </div>
+
+      <form id="mqttConfigForm" class="modal-body">
+        <div class="input-group">
+          <label for="cfgHost">Broker Host / Domain (WSS)</label>
+          <input type="text" id="cfgHost" class="input-text" value="w7dceb27.ala.asia-southeast1.emqxsl.com" required>
+        </div>
+
+        <div class="form-row">
+          <div class="input-group col-6">
+            <label for="cfgPort">WSS Port</label>
+            <input type="number" id="cfgPort" class="input-text" value="8084" required>
+            <small class="help-text">Default WSS TLS port: 8084 / WS: 8083</small>
+          </div>
+          <div class="input-group col-6">
+            <label for="cfgPath">Path</label>
+            <input type="text" id="cfgPath" class="input-text" value="/mqtt">
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label for="cfgTopic">MQTT Topic</label>
+          <input type="text" id="cfgTopic" class="input-text" value="esp32/thermohygro/data" required>
+        </div>
+
+        <div class="form-row">
+          <div class="input-group col-6">
+            <label for="cfgUsername">Username</label>
+            <input type="text" id="cfgUsername" class="input-text" value="bpafk">
+          </div>
+          <div class="input-group col-6">
+            <label for="cfgPassword">Password</label>
+            <input type="password" id="cfgPassword" class="input-text" value="bpafksurakarta">
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label class="checkbox-container">
+            <input type="checkbox" id="cfgUseSSL" checked>
+            <span class="checkmark"></span>
+            Gunakan SSL/TLS (WSS Protocol)
+          </label>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" id="btnResetConfig" class="btn btn-outline">Reset Default</button>
+          <button type="submit" class="btn btn-primary"><i class="fa-solid fa-plug"></i> Hubungkan MQTT</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- JavaScript Scripts -->
+  <script src="js/chart-config.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

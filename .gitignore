@@ -1,0 +1,14 @@
+# Dependencies & Environment
+node_modules/
+.env
+.env.local
+
+# Logs & Temporary files
+*.log
+.DS_Store
+Thumbs.db
+
+# IDE & Gemini metadata
+.gemini/
+.vscode/
+.idea/

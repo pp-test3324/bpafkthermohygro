@@ -3,7 +3,7 @@
  * Endpoint: /.netlify/functions/sheet
  */
 
-const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxKd6DHWHucCOBcq7OOD4Qr4IhQXhGVKTPlhrmN_C5iP_5rB1WRs1MlZAm_KeMAgRYI/exec';
+const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyPo3D2fzZX3ArMie1qWyr_pFXydc-n5SCBLdAQhZpoRd836VIAlRXv698jM43_IbCD/exec';
 
 exports.handler = async (event, context) => {
   // CORS Headers for browser requests

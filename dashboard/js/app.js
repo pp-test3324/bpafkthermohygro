@@ -9,7 +9,7 @@ const appState = {
   isDemoMode: false,
   demoInterval: null,
   unit: 'C', // 'C' or 'F'
-  googleScriptUrl: '', // Web App URL for multi-device sync
+  googleScriptUrl: 'https://script.google.com/macros/s/AKfycbxKd6DHWHucCOBcq7OOD4Qr4IhQXhGVKTPlhrmN_C5iP_5rB1WRs1MlZAm_KeMAgRYI/exec', // Default Web App URL for multi-device sync
   readings: [], // Historical data [{ id, timestamp, fullDateTimeStr, timeStr, tempC, tempF, hum, hourlyTempAvgC, hourlyHumAvg, source, hasAlert }]
   stats: {
     tempMin: null,

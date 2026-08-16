@@ -9,7 +9,8 @@ const appState = {
   isDemoMode: false,
   demoInterval: null,
   unit: 'C', // 'C' or 'F'
-  readings: [], // Historical data [{ id, timestamp, timeStr, dateStr, tempC, tempF, hum, heatIndexC, dewPointC, status }]
+  googleScriptUrl: '', // Web App URL for multi-device sync
+  readings: [], // Historical data [{ id, timestamp, fullDateTimeStr, timeStr, tempC, tempF, hum, hourlyTempAvgC, hourlyHumAvg, source, hasAlert }]
   stats: {
     tempMin: null,
     tempMax: null,
@@ -60,6 +61,11 @@ function loadSavedSettings() {
     }
   }
 
+  const savedScriptUrl = localStorage.getItem('thermohygro_google_script_url');
+  if (savedScriptUrl) {
+    appState.googleScriptUrl = savedScriptUrl;
+  }
+
   const savedThresholds = localStorage.getItem('thermohygro_thresholds');
   if (savedThresholds) {
     try {
@@ -83,6 +89,7 @@ function loadSavedSettings() {
   const cfgPort = document.getElementById('cfgPort');
   const cfgPath = document.getElementById('cfgPath');
   const cfgTopic = document.getElementById('cfgTopic');
+  const cfgScript = document.getElementById('cfgGoogleScript');
   const cfgUser = document.getElementById('cfgUsername');
   const cfgPass = document.getElementById('cfgPassword');
   const cfgSSL = document.getElementById('cfgUseSSL');
@@ -91,13 +98,112 @@ function loadSavedSettings() {
   if (cfgPort) cfgPort.value = appState.mqttConfig.port;
   if (cfgPath) cfgPath.value = appState.mqttConfig.path;
   if (cfgTopic) cfgTopic.value = appState.mqttConfig.topic;
+  if (cfgScript) cfgScript.value = appState.googleScriptUrl || '';
   if (cfgUser) cfgUser.value = appState.mqttConfig.username;
   if (cfgPass) cfgPass.value = appState.mqttConfig.password;
   if (cfgSSL) cfgSSL.checked = appState.mqttConfig.useSSL;
 }
 
-// Load Telemetry History from LocalStorage on Page Reload
-function loadSavedHistory() {
+// Load Telemetry History (Priority: Google Sheets -> LocalStorage Fallback)
+async function loadSavedHistory() {
+  if (appState.googleScriptUrl && appState.googleScriptUrl.trim() !== '') {
+    const success = await syncFromGoogleSheet();
+    if (success) return;
+  }
+  loadLocalStorageHistory();
+}
+
+// Fetch History from Google Sheet Web App Endpoint
+async function syncFromGoogleSheet() {
+  if (!appState.googleScriptUrl || appState.googleScriptUrl.trim() === '') {
+    showNotification('URL Google Apps Script belum diisi di menu Config!', 'warning');
+    return false;
+  }
+
+  showNotification('Menghubungkan & mengambil data dari Google Sheet...', 'info');
+
+  try {
+    const response = await fetch(appState.googleScriptUrl.trim());
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+
+    if (Array.isArray(data) && data.length > 0) {
+      console.log(`Berhasil memuat ${data.length} baris riwayat dari Google Sheet.`);
+
+      // Reset Current State before loading clean history from Cloud Sheet
+      clearLogsWithoutNotification();
+
+      data.forEach(item => {
+        const tempC = parseFloat(item.temperature);
+        const hum = parseFloat(item.humidity);
+        const timestampStr = item.timestamp ? String(item.timestamp) : '';
+
+        if (!isNaN(tempC) && !isNaN(hum)) {
+          processHistoricalRecord(tempC, hum, timestampStr, 'Google Sheet');
+        }
+      });
+
+      showNotification(`Berhasil memuat ${data.length} data riwayat dari Google Sheet!`, 'success');
+      return true;
+    } else {
+      console.log('Google Sheet kosong atau tidak mengembalikan array data.');
+      return false;
+    }
+  } catch (e) {
+    console.error('Gagal mengambil data dari Google Sheet:', e);
+    showNotification('Gagal memuat Google Sheet. Menggunakan memori browser lokal.', 'warning');
+    return false;
+  }
+}
+
+// Process single historical record from Google Sheet / Backup
+function processHistoricalRecord(tempC, humidity, timeLabel, sourceName = 'Google Sheet') {
+  const now = new Date();
+  const fullDateTimeStr = timeLabel || formatIndonesianDateTime(now);
+  const timeStr = timeLabel.includes(',') ? timeLabel.split(',')[1].trim() : (timeLabel || now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }));
+
+  const tempF = (tempC * 9 / 5) + 32;
+
+  // Update Stats
+  appState.stats.count++;
+  appState.stats.tempSum += tempC;
+  appState.stats.humSum += humidity;
+
+  if (appState.stats.tempMin === null || tempC < appState.stats.tempMin) appState.stats.tempMin = tempC;
+  if (appState.stats.tempMax === null || tempC > appState.stats.tempMax) appState.stats.tempMax = tempC;
+  if (appState.stats.humMin === null || humidity < appState.stats.humMin) appState.stats.humMin = humidity;
+  if (appState.stats.humMax === null || humidity > appState.stats.humMax) appState.stats.humMax = humidity;
+
+  const reading = {
+    id: appState.readings.length + 1,
+    timestamp: now.getTime(),
+    fullDateTimeStr: fullDateTimeStr,
+    timeStr: timeStr,
+    tempC: tempC,
+    tempF: parseFloat(tempF.toFixed(2)),
+    hum: humidity,
+    source: sourceName,
+    hasAlert: false
+  };
+
+  appState.readings.push(reading);
+
+  // Add to Chart
+  chartManager.addDataPoint({
+    timestamp: reading.timestamp,
+    timeStr: timeStr,
+    temperature: tempC,
+    humidity: humidity
+  });
+
+  // Update UI Elements
+  updateKPIUI();
+  appendRowToTable(reading);
+  document.getElementById('totalDataCount').textContent = appState.stats.count;
+}
+
+// Load History from LocalStorage Backup
+function loadLocalStorageHistory() {
   const savedReadings = localStorage.getItem('thermohygro_history_readings');
   const savedStats = localStorage.getItem('thermohygro_history_stats');
 
@@ -144,6 +250,9 @@ function saveHistoryToStorage() {
 function saveSettings() {
   localStorage.setItem('thermohygro_mqtt_config', JSON.stringify(appState.mqttConfig));
   localStorage.setItem('thermohygro_thresholds', JSON.stringify(appState.thresholds));
+  if (appState.googleScriptUrl !== undefined) {
+    localStorage.setItem('thermohygro_google_script_url', appState.googleScriptUrl.trim());
+  }
 }
 
 // Initialize Charts
@@ -153,6 +262,14 @@ function initChart() {
 
 // Setup Event Listeners
 function initEventListeners() {
+  // Sync Google Sheet Button
+  const btnSyncSheet = document.getElementById('btnSyncGoogleSheet');
+  if (btnSyncSheet) {
+    btnSyncSheet.addEventListener('click', () => {
+      syncFromGoogleSheet();
+    });
+  }
+
   // Unit Toggle Button
   const btnUnit = document.getElementById('unitToggleBtn');
   if (btnUnit) {
@@ -194,12 +311,23 @@ function initEventListeners() {
       appState.mqttConfig.port = parseInt(document.getElementById('cfgPort').value.trim(), 10);
       appState.mqttConfig.path = document.getElementById('cfgPath').value.trim();
       appState.mqttConfig.topic = document.getElementById('cfgTopic').value.trim();
+      
+      const elemScript = document.getElementById('cfgGoogleScript');
+      if (elemScript) {
+        appState.googleScriptUrl = elemScript.value.trim();
+      }
+
       appState.mqttConfig.username = document.getElementById('cfgUsername').value.trim();
       appState.mqttConfig.password = document.getElementById('cfgPassword').value.trim();
       appState.mqttConfig.useSSL = document.getElementById('cfgUseSSL').checked;
 
       saveSettings();
       document.getElementById('configModal').classList.remove('active');
+
+      // Sync Google Sheet history if URL provided
+      if (appState.googleScriptUrl) {
+        syncFromGoogleSheet();
+      }
 
       if (appState.isDemoMode) {
         toggleDemoMode(); // Turn off demo mode first
@@ -863,14 +991,38 @@ function importFromJSON(event) {
   event.target.value = ''; // Reset input so same file can be selected again
 }
 
+function clearLogsWithoutNotification() {
+  appState.readings = [];
+  appState.stats = {
+    tempMin: null, tempMax: null, tempSum: 0,
+    humMin: null, humMax: null, humSum: 0, count: 0
+  };
+
+  if (chartManager) {
+    chartManager.clearData();
+  }
+
+  const tbody = document.getElementById('logsTableBody');
+  if (tbody) {
+    tbody.innerHTML = `
+      <tr class="empty-row">
+        <td colspan="4">
+          <div class="empty-state">
+            <i class="fa-solid fa-spinner fa-spin"></i>
+            <p>Menunggu data telemetri masuk dari EMQX (Tiap 5 Menit)...</p>
+          </div>
+        </td>
+      </tr>
+    `;
+  }
+
+  const elemCount = document.getElementById('totalDataCount');
+  if (elemCount) elemCount.textContent = '0';
+}
+
 function clearLogs() {
   if (confirm('Apakah Anda yakin ingin menghapus seluruh riwayat telemetri?')) {
-    appState.readings = [];
-    appState.stats = {
-      tempMin: null, tempMax: null, tempSum: 0,
-      humMin: null, humMax: null, humSum: 0, count: 0
-    };
-
+    clearLogsWithoutNotification();
     localStorage.removeItem('thermohygro_history_readings');
     localStorage.removeItem('thermohygro_history_stats');
 

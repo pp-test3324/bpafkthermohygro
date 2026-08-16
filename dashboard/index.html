@@ -117,6 +117,9 @@
               <i class="fa-solid fa-magnifying-glass"></i>
               <input type="text" id="tableSearchInput" placeholder="Cari tanggal/waktu...">
             </div>
+            <button id="btnSyncGoogleSheet" class="btn btn-secondary btn-sm" title="Sinkronkan Riwayat dari Google Sheet">
+              <i class="fa-solid fa-cloud-arrow-down"></i> Sync Sheet
+            </button>
             <button id="btnExportCSV" class="btn btn-emerald btn-sm">
               <i class="fa-solid fa-file-csv"></i> Ekspor CSV
             </button>
@@ -215,7 +218,7 @@
   <div id="configModal" class="modal-overlay">
     <div class="modal-card">
       <div class="modal-header">
-        <h3><i class="fa-solid fa-sliders"></i> Konfigurasi EMQX MQTT Broker</h3>
+        <h3><i class="fa-solid fa-sliders"></i> Konfigurasi EMQX & Google Sheet Sync</h3>
         <button id="btnCloseConfigModal" class="modal-close-btn">&times;</button>
       </div>
 
@@ -240,6 +243,12 @@
         <div class="input-group">
           <label for="cfgTopic">MQTT Topic</label>
           <input type="text" id="cfgTopic" class="input-text" value="esp32/thermohygro/data" required>
+        </div>
+
+        <div class="input-group">
+          <label for="cfgGoogleScript">Google Apps Script Web App URL (Sync Multi-Device)</label>
+          <input type="url" id="cfgGoogleScript" class="input-text" placeholder="https://script.google.com/macros/s/.../exec">
+          <small class="help-text">Masukkan URL Google Apps Script Anda untuk sinkronisasi riwayat data di semua device.</small>
         </div>
 
         <div class="form-row">

@@ -1,0 +1,8 @@
+[build]
+  publish = "dashboard"
+  functions = "dashboard/netlify/functions"
+
+[[redirects]]
+  from = "/api/sheet"
+  to = "/.netlify/functions/sheet"
+  status = 200

@@ -11,7 +11,7 @@ const appState = {
   unit: 'C', // 'C' or 'F'
   googleScriptUrl: (window.location.hostname.includes('netlify.app') || window.location.hostname === 'localhost')
     ? `${window.location.origin}/.netlify/functions/sheet`
-    : 'https://script.google.com/macros/s/AKfycbxrjLDHuBaaDzyZSfBundV9_UOX9t0CiepEN8CVpxVQXrd9XRnJs9dskhrb5BEOuHaG/exec', // Web App URL for multi-device sync
+    : 'https://script.google.com/macros/s/AKfycbxKd6DHWHucCOBcq7OOD4Qr4IhQXhGVKTPlhrmN_C5iP_5rB1WRs1MlZAm_KeMAgRYI/exec', // Web App URL for multi-device sync
   readings: [], // Historical data [{ id, timestamp, fullDateTimeStr, timeStr, tempC, tempF, hum, hourlyTempAvgC, hourlyHumAvg, source, hasAlert }]
   stats: {
     tempMin: null,

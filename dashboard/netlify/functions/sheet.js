@@ -3,7 +3,7 @@
  * Endpoint: /.netlify/functions/sheet
  */
 
-const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxrjLDHuBaaDzyZSfBundV9_UOX9t0CiepEN8CVpxVQXrd9XRnJs9dskhrb5BEOuHaG/exec';
+const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxKd6DHWHucCOBcq7OOD4Qr4IhQXhGVKTPlhrmN_C5iP_5rB1WRs1MlZAm_KeMAgRYI/exec';
 
 exports.handler = async (event, context) => {
   // CORS Headers for browser requests
@@ -26,13 +26,25 @@ exports.handler = async (event, context) => {
   try {
     if (event.httpMethod === 'POST') {
       // Forward POST from EMQX to Google Apps Script
-      let payload = event.body;
-      console.log('Received POST from EMQX:', payload);
+      let rawBody = event.body || '{}';
+      let dataObj = {};
+      try { dataObj = JSON.parse(rawBody); } catch(e) { dataObj = {}; }
+
+      // Unwrap EMQX payload wrapper if present
+      if (dataObj.payload) {
+        if (typeof dataObj.payload === 'string') {
+          try { dataObj = JSON.parse(dataObj.payload); } catch(e) {}
+        } else if (typeof dataObj.payload === 'object') {
+          dataObj = dataObj.payload;
+        }
+      }
+
+      console.log('Forwarding cleaned payload to Google Script:', dataObj);
 
       const response = await fetch(GOOGLE_SCRIPT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: payload
+        body: JSON.stringify(dataObj)
       });
 
       const resultText = await response.text();

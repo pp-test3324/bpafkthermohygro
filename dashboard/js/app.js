@@ -48,8 +48,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadSavedSettings();
   initChart();
   initEventListeners();
-  await loadSavedHistory();
-  connectMQTT();
+
+  const hasSheetData = await loadSavedHistory();
+
+  if (hasSheetData) {
+    console.log('Google Sheet data loaded. Polling Google Sheet for new telemetry...');
+    updateConnectionStatus('connected', 'Google Sheet (Aktif)');
+    // Auto-sync from Google Sheet every 10 seconds to catch new records seamlessly
+    setInterval(syncFromGoogleSheetSilently, 10000);
+  } else {
+    console.log('No Google Sheet data found. Connecting to EMQX MQTT live stream...');
+    connectMQTT();
+  }
 });
 
 // Load Settings from LocalStorage
@@ -110,9 +120,9 @@ function loadSavedSettings() {
 async function loadSavedHistory() {
   if (appState.googleScriptUrl && appState.googleScriptUrl.trim() !== '') {
     const success = await syncFromGoogleSheet();
-    if (success) return;
+    if (success) return true;
   }
-  loadLocalStorageHistory();
+  return loadLocalStorageHistory();
 }
 
 // Fetch History from Google Sheet Web App Endpoint
@@ -155,6 +165,35 @@ async function syncFromGoogleSheet() {
     console.error('Gagal mengambil data dari Google Sheet:', e);
     showNotification('Gagal memuat Google Sheet. Menggunakan memori browser lokal.', 'warning');
     return false;
+  }
+}
+
+// Silent auto-polling background sync from Google Sheet
+async function syncFromGoogleSheetSilently() {
+  if (!appState.googleScriptUrl || appState.googleScriptUrl.trim() === '') return;
+  try {
+    const response = await fetch(appState.googleScriptUrl.trim());
+    if (!response.ok) return;
+    const data = await response.json();
+
+    if (Array.isArray(data) && data.length > 0) {
+      if (data.length !== appState.readings.length) {
+        console.log(`Google Sheet updated! Syncing ${data.length} records...`);
+        clearLogsWithoutNotification();
+        data.forEach(item => {
+          const tempC = parseFloat(item.temperature);
+          const hum = parseFloat(item.humidity);
+          const timestampStr = item.timestamp ? String(item.timestamp) : '';
+
+          if (!isNaN(tempC) && !isNaN(hum)) {
+            processHistoricalRecord(tempC, hum, timestampStr, 'Google Sheet');
+          }
+        });
+        updateKPIUI();
+      }
+    }
+  } catch (e) {
+    console.warn('Silent Google Sheet sync failed:', e);
   }
 }
 
